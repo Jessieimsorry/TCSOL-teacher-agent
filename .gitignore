@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.test-data/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+*.sqlite*
+*.db
+master.key
+server.pid
+server-control.json
+data/
+artifacts/

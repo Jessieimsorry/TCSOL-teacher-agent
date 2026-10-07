@@ -1,0 +1,42 @@
+name: Cross-platform verification
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Windows startup and graceful stop
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:CTT_DATA_DIR = Join-Path $env:RUNNER_TEMP '教师 工作台 data'
+          $server = Start-Process node -ArgumentList '--import','tsx','server/index.ts' -PassThru -NoNewWindow
+          try {
+            $ready = $false
+            for ($n = 0; $n -lt 30; $n++) {
+              try {
+                $health = Invoke-RestMethod http://127.0.0.1:8790/api/health
+                if ($health.app -eq 'ChineseTeachingTeam') { $ready = $true; break }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) { throw 'Workbench did not start' }
+            node scripts/stop.mjs
+            if ($LASTEXITCODE -ne 0) { throw 'Graceful stop failed' }
+            if (-not $server.WaitForExit(10000)) { throw 'Server did not stop' }
+          } finally {
+            if (-not $server.HasExited) { Stop-Process -Id $server.Id }
+          }
